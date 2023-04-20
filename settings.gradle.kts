@@ -8,4 +8,23 @@
  */
 
 rootProject.name = "ktor-ksp-routing"
-include("lib")
+
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+    }
+}
+
+plugins {
+    kotlin("jvm") version "1.8.20" apply false
+}
+
+buildscript {
+    dependencies {
+        classpath(kotlin("gradle-plugin", version = "1.8.20"))
+    }
+}
+
+include(":core")
+include(":processor")
+include(":test")

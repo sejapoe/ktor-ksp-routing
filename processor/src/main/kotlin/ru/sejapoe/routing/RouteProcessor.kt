@@ -1,5 +1,8 @@
 package ru.sejapoe.routing
 
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.routing.*
 import com.google.devtools.ksp.processing.*
 import com.google.devtools.ksp.symbol.*
 import com.squareup.kotlinpoet.*
@@ -8,11 +11,7 @@ import com.squareup.kotlinpoet.ksp.kspDependencies
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.routing.*
 import java.util.*
-import kotlin.reflect.KClass
 
 class RouteProcessorProvider : SymbolProcessorProvider {
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
