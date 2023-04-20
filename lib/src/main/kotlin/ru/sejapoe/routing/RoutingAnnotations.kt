@@ -4,35 +4,35 @@ import kotlin.reflect.KClass
 
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Route(val path: String)
+annotation class Route(val path: String = "")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Get(val path: String)
+annotation class Get(val path: String = "")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Post(val path: String)
+annotation class Post(val path: String = "")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Put(val path: String)
+annotation class Put(val path: String = "")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Delete(val path: String)
+annotation class Delete(val path: String = "")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Patch(val path: String)
+annotation class Patch(val path: String = "")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Head(val path: String)
+annotation class Head(val path: String = "")
 
 @Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class Options(val path: String)
+annotation class Options(val path: String = "")
 
 
 @Target(AnnotationTarget.VALUE_PARAMETER)
