@@ -4,9 +4,6 @@ plugins {
     `java-library`
 }
 
-group = "ru.sejapoe.routing"
-version = "0.0.1"
-
 repositories {
     mavenCentral()
 }

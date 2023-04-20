@@ -4,24 +4,8 @@ plugins {
     `java-library`
 }
 
-group = "ru.sejapoe.routing"
-version = "0.0.1"
-
 repositories {
     mavenCentral()
-}
-
-
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            group = "com.github.sejapoe"
-            artifactId = "ktor-ksp-routing"
-            version = "1.0.5"
-
-            from(components["java"])
-        }
-    }
 }
 
 dependencies {
