@@ -34,22 +34,19 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
 
     private fun processClass(
         ksAnnotated: KSClassDeclaration,
-        parentPath: String = "",
-        classPath: List<String> = emptyList()
+        parentPath: String = ""
     ): List<RouteInfo> {
         if (ksAnnotated.classKind != ClassKind.OBJECT) throw IllegalArgumentException("@Route allowed only for objects")
         val routeAnnotation = ksAnnotated.annotations.first { it.shortName.asString() == Route::class.simpleName }
         val path = routeAnnotation.arguments.first { it.name?.asString() == "path" }.value?.toString() ?: ""
         val fullPath = "$parentPath$path"
-        val className = ksAnnotated.simpleName.asString()
-        val newClassPath = classPath + className
         val routes = ksAnnotated.declarations.filterIsInstance<KSFunctionDeclaration>()
             .filter { func -> func.annotations.any { ann -> methodAnnotations.contains(ann.shortName.asString()) } }
-            .map { processFunction(it, fullPath, newClassPath.joinToString(".")) }.toMutableList()
+            .map { processFunction(it, fullPath, ksAnnotated.qualifiedName!!.asString()) }.toMutableList()
         routes.addAll(
             ksAnnotated.declarations.filterIsInstance<KSClassDeclaration>()
                 .filter { it.annotations.any { ann -> ann.shortName.asString() == Route::class.simpleName } }
-                .flatMap { processClass(it, fullPath, newClassPath) })
+                .flatMap { processClass(it, fullPath) })
         return routes
     }
 
