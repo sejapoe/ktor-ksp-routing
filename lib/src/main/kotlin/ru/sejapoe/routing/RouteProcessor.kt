@@ -315,11 +315,13 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
 
     companion object {
         private val methodAnnotations = listOf(
-            Get::class.java.name,
-            Post::class.java.name,
-            Put::class.java.name,
-            Delete::class.java.name,
-            Patch::class.java.name
+            Get::class.simpleName,
+            Post::class.simpleName,
+            Put::class.simpleName,
+            Delete::class.simpleName,
+            Patch::class.simpleName,
+            Head::class.simpleName,
+            Options::class.simpleName
         )
         private val primitiveConverters = mapOf(
             "kotlin.String" to MemberName("kotlin.text", "toString"),
@@ -345,7 +347,6 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         private val respondFunction = MemberName("io.ktor.server.response", "respond")
         private val receiveFunction = MemberName("io.ktor.server.request", "receive")
         private val statusObject = MemberName("io.ktor.http", "HttpStatusCode")
-        private val authenticateFunction = MemberName("", "authenticate")
     }
 }
 
