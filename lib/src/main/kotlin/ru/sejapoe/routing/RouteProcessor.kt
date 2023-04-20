@@ -161,10 +161,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             .receiver(Application::class)
             .addParameter(
                 "providers",
-                Map::class.asClassName().parameterizedBy(
-                    KClass::class.asClassName().parameterizedBy(STAR),
-                    Provider::class.asClassName().parameterizedBy(STAR)
-                )
+                ProviderRegistry::class
             )
             .addModifiers(KModifier.OVERRIDE)
         funBuilder.beginControlFlow("routing")
@@ -191,10 +188,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         val funBuilder = FunSpec.builder(fileName.toCamelCase())
             .addParameter(
                 "providers",
-                Map::class.asClassName().parameterizedBy(
-                    KClass::class.asClassName().parameterizedBy(STAR),
-                    Provider::class.asClassName().parameterizedBy(STAR)
-                )
+                ProviderRegistry::class
             )
             .receiver(Routing::class)
         routes.forEach { routeInfo ->
@@ -207,15 +201,13 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             routeInfo.provided.forEach {
                 val type = it.type.resolve()
                 funBuilder.addStatement(
-                    "val ${it.name}Provider = providers[%T::class] ?: throw IllegalArgumentException(%S)",
+                    "val ${it.name}Provider = providers.get<%T>() ?: throw IllegalArgumentException(%S)",
                     type.toTypeName(),
                     "No provider found for ${type.toTypeName()}"
                 )
                 funBuilder.addStatement(
-                    "val ${it.name} = ${it.name}Provider.provide(%M) as? %T ?: throw IllegalArgumentException(%S)",
+                    "val ${it.name} = ${it.name}Provider.provide(%M)",
                     callFunction,
-                    type.toTypeName(),
-                    "Provider for ${type.toTypeName()} returned wrong type"
                 )
             }
 

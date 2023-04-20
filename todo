@@ -1,4 +1,6 @@
 - Remove response (unused) from methods, and make return type of function is response body
 - make convert registration in plugin configuration, and remove convert registration in method
 - add tests for all
--
+- add headers and query parameters to request
+- fix "gradle clean build" needment after each change in plugin
+- fix auto-reload broke providers

@@ -20,12 +20,16 @@ repositories {
     mavenCentral()
 }
 
+kotlin {
+    jvmToolchain(11)
+}
+
 publishing {
     publications {
         create<MavenPublication>("maven") {
-            group = "ru.sejapoe.routing"
-            artifactId = "routing"
-            version = "1.0.0"
+            group = "com.github.sejapoe"
+            artifactId = "ktor-ksp-routing"
+            version = "1.0.5"
 
             from(components["java"])
         }
