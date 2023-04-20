@@ -5,6 +5,7 @@ import com.google.devtools.ksp.symbol.*
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.ksp.kspDependencies
+import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
 import io.ktor.http.*
@@ -250,11 +251,17 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                 }
             }
             if (routeInfo.body != null) {
+                val type = routeInfo.body.type.resolve()
+                val args =
+                    if (type.arguments.isNotEmpty())
+                        type.toClassName()
+                            .parameterizedBy(type.arguments.mapNotNull { it.type?.resolve()?.toTypeName() })
+                    else type.toTypeName()
                 funBuilder.addStatement(
                     "val ${routeInfo.body.name} = %M.%M<%T>()",
                     callFunction,
                     receiveFunction,
-                    routeInfo.body.type.resolve().toTypeName()
+                    args
                 )
             }
 
