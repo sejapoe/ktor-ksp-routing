@@ -6,6 +6,7 @@ import io.ktor.server.testing.*
 import io.ktor.util.*
 import org.junit.jupiter.api.Test
 import ru.sejapoe.routing.*
+import ru.sejapoe.routing.Route
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import kotlin.test.assertEquals
@@ -79,13 +80,94 @@ object TestRouting {
     }
 
     @Get("/getAnnotatedConverterPathParam/{exception}")
-    fun getAnnotatedConverterPathParam(@Convert(ExceptionConverter::class) exception: Exception) = "nice ${exception.message}"
+    fun getAnnotatedConverterPathParam(@Convert(ExceptionConverter::class) exception: Exception) =
+        "nice ${exception.message}"
 
     @Test
     fun `get annotated converter path param`(): Unit = testApplication {
         val response = client.get("/test/getAnnotatedConverterPathParam/abc")
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("nice abc", response.bodyAsText())
+    }
+
+    @Get("/getIntQueryParam")
+    fun getIntQueryParam(@Query id: Int) = "nice $id"
+
+    @Test
+    fun `get int query param`(): Unit = testApplication {
+        val response = client.get("/test/getIntQueryParam?id=1")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice 1", response.bodyAsText())
+    }
+
+    @Get("/getIntQueryParamNotRequired")
+    fun getIntQueryParamNotRequired(@Query id: Int?) = "nice $id"
+
+    @Test
+    fun `get int query param not required, not provided`(): Unit = testApplication {
+        val response = client.get("/test/getIntQueryParamNotRequired")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice null", response.bodyAsText())
+    }
+
+    @Test
+    fun `get int query param not required, provided`(): Unit = testApplication {
+        val response = client.get("/test/getIntQueryParamNotRequired?id=1")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice 1", response.bodyAsText())
+    }
+
+    @Get("/getStringQueryParamWithCustomName")
+    fun getStringQueryParamWithCustomName(@Query("str") id: String) = "nice $id"
+
+    @Test
+    fun `get string query param with custom name`(): Unit = testApplication {
+        val response = client.get("/test/getStringQueryParamWithCustomName?str=abc")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice abc", response.bodyAsText())
+    }
+
+    @Get("/getHeaderIntParam")
+    fun getHeaderIntParam(@Header id: Int) = "nice $id"
+
+    @Test
+    fun `get header int param`(): Unit = testApplication {
+        val response = client.get("/test/getHeaderIntParam") {
+            headers.append("id", "1")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice 1", response.bodyAsText())
+    }
+
+    @Get("/getHeaderStringParamNotRequired")
+    fun getHeaderStringParamNotRequired(@Header str: String?) = "nice $str"
+
+    @Test
+    fun `get header string param not required, not provided`(): Unit = testApplication {
+        val response = client.get("/test/getHeaderStringParamNotRequired")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice null", response.bodyAsText())
+    }
+
+    @Test
+    fun `get header string param not required, provided`(): Unit = testApplication {
+        val response = client.get("/test/getHeaderStringParamNotRequired") {
+            headers.append("str", "ass")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice ass", response.bodyAsText())
+    }
+
+    @Get("/getHeaderStringWithCustomName")
+    fun getHeaderStringWithCustomName(@Header("str") totallyNotStr: String) = "nice $totallyNotStr"
+
+    @Test
+    fun `get header string with custom name`() = testApplication {
+        val response = client.get("/test/getHeaderStringWithCustomName") {
+            headers.append("str", "ass")
+        }
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice ass", response.bodyAsText())
     }
 }
 

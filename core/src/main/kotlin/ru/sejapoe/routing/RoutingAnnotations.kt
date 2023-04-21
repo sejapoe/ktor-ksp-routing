@@ -41,6 +41,14 @@ annotation class Path(val name: String)
 
 @Target(AnnotationTarget.VALUE_PARAMETER)
 @Retention(AnnotationRetention.SOURCE)
+annotation class Query(val name: String = "")
+
+@Target(AnnotationTarget.VALUE_PARAMETER)
+@Retention(AnnotationRetention.SOURCE)
+annotation class Header(val name: String = "")
+
+@Target(AnnotationTarget.VALUE_PARAMETER)
+@Retention(AnnotationRetention.SOURCE)
 annotation class Convert(val converter: KClass<out Converter<*>>)
 
 @Target(AnnotationTarget.VALUE_PARAMETER)

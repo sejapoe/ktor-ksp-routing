@@ -1,8 +1,5 @@
 package ru.sejapoe.routing
 
-import io.ktor.http.*
-import io.ktor.server.application.*
-import io.ktor.server.routing.*
 import com.google.devtools.ksp.processing.*
 import com.google.devtools.ksp.symbol.*
 import com.squareup.kotlinpoet.*
@@ -11,6 +8,9 @@ import com.squareup.kotlinpoet.ksp.kspDependencies
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import com.squareup.kotlinpoet.ksp.writeTo
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.routing.*
 import java.util.*
 
 class RouteProcessorProvider : SymbolProcessorProvider {
@@ -67,14 +67,14 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             func.parameters.filter { it.annotations.any { ann -> ann.shortName.asString() == Provided::class.simpleName } }
 
 
-        val provided = providedParams.map { ksValueParameter ->
-            ProvidedParam(
+        params += providedParams.map { ksValueParameter ->
+            Param(
                 ksValueParameter.name!!.asString(),
                 ksValueParameter.type,
-                func.parameters.indexOf(ksValueParameter)
+                func.parameters.indexOf(ksValueParameter),
+                ParamType.PROVIDED
             )
         }
-
 
         val afterAuthRemained = afterParamsRemained - providedParams.toSet()
 
@@ -86,13 +86,14 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             throw IllegalArgumentException("Only one body parameter is allowed")
         }
 
-        val body = bodyParams.map { ksValueParameter ->
-            BodyParam(
+        params += bodyParams.map { ksValueParameter ->
+            Param(
                 ksValueParameter.name!!.asString(),
                 ksValueParameter.type,
-                func.parameters.indexOf(ksValueParameter)
+                func.parameters.indexOf(ksValueParameter),
+                ParamType.BODY
             )
-        }.firstOrNull()
+        }
 
         val returnType = func.returnType ?: throw IllegalArgumentException("Return type is required")
         val resolvedReturnType = returnType.resolve()
@@ -105,16 +106,15 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             className,
             func.simpleName.asString(),
             params,
-            body,
-            provided,
             resolvedReturnType
         )
     }
 
     private fun parseParams(
         pathParamsDecl: List<String>,
-        parameters: List<KSValueParameter>
-    ): Pair<List<PathParam>, List<KSValueParameter>> {
+        parameterList: List<KSValueParameter>
+    ): Pair<MutableList<Param>, MutableList<KSValueParameter>> {
+        val parameters = parameterList.toMutableSet()
         val namedParameters = parameters.associateBy {
             val pathAnnotation =
                 it.annotations.firstOrNull { ann -> ann.shortName.asString() == Path::class.simpleName }
@@ -126,25 +126,47 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             throw IllegalArgumentException("Path parameters in function and route are not equal")
         }
 
-        val remainingParameters =
-            parameters.toSet() - namedParameters.filterKeys { it in pathParamsDeclSet }.values.toSet()
+        parameters -= namedParameters.filterKeys { it in pathParamsDeclSet }.values.toSet()
 
-        val pathParams = pathParamsDecl.map {
+        val parsedParams = mutableListOf<Param>()
+        parsedParams += pathParamsDecl.map {
             val parameter = namedParameters[it.removeSuffix("?")]!!
             val converterClass =
                 parameter.annotations.firstOrNull { ann -> ann.shortName.asString() == Convert::class.simpleName }
                     ?.arguments?.first()?.value as? KSType
 
-            PathParam(
+            StringParam(
                 it.removeSuffix("?"),
                 parameter.type,
                 parameters.indexOf(parameter),
-                converterClass,
-                !it.endsWith("?")
+                ParamType.PATH,
+                !it.endsWith("?"),
+                converterClass
             )
         }
 
-        return pathParams to remainingParameters.toList()
+
+        parsedParams += parameters.mapNotNull {
+            val annotations =
+                it.annotations.filter { ann -> paramAnnotations.contains(ann.shortName.asString()) }.toList()
+            if (annotations.size > 1) {
+                throw IllegalArgumentException("Only one annotation is allowed for parameter")
+            }
+            if (annotations.isEmpty()) return@mapNotNull null
+            val annotation = annotations.first()
+            val name = annotation.arguments.firstOrNull()?.value?.toString()?.ifEmpty { null } ?: it.name!!.asString()
+            val converterClass =
+                it.annotations.firstOrNull { ann -> ann.shortName.asString() == Convert::class.simpleName }
+                    ?.arguments?.first()?.value as? KSType
+            val paramType = when (annotation.shortName.asString()) {
+                Query::class.simpleName -> ParamType.QUERY
+                Header::class.simpleName -> ParamType.HEADER
+                else -> throw IllegalArgumentException("Unknown annotation")
+            }
+            StringParam(name, it.type, parameters.indexOf(it), paramType, null, converterClass)
+        }
+
+        return parsedParams to parameters.toMutableList()
     }
 
     override fun finish() {
@@ -190,7 +212,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                 routeInfo.path
             )
 
-            routeInfo.provided.forEach {
+            routeInfo.params.filter { it.paramType === ParamType.PROVIDED }.forEach {
                 val type = it.type.resolve()
                 funBuilder.addStatement(
                     "val ${it.name}Provider = providers.get<%T>() ?: throw %M(%S)",
@@ -204,18 +226,19 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                 )
             }
 
-            routeInfo.params.forEach { param ->
+            routeInfo.params.filterIsInstance<StringParam>().forEach { param ->
                 val ksType = param.type.resolve()
-                if (ksType.isMarkedNullable && param.isRequired) throw IllegalArgumentException("Parameter is nullable but required")
-                if (!ksType.isMarkedNullable && !param.isRequired) throw IllegalArgumentException("Parameter (${ksType}) is not nullable but not required")
+                val isRequired = param.isRequired ?: !ksType.isMarkedNullable
+                if (ksType.isMarkedNullable && isRequired) throw IllegalArgumentException("Parameter (${ksType}/${routeInfo.path}) is nullable but required")
+                if (!ksType.isMarkedNullable && !isRequired) throw IllegalArgumentException("Parameter (${ksType}) is not nullable but not required")
                 if (param.converterClass != null) {
                     if ((param.converterClass.declaration as KSClassDeclaration).superTypes.first()
                             .resolve().arguments.first().type?.resolve() != ksType
                     ) throw IllegalArgumentException("Converter and parameter type are mismatched")
                     val requirer =
-                        if (param.isRequired) "\n?: throw BadRequestException(\"${param.name} is required\")" else ""
+                        if (isRequired) "\n?: throw BadRequestException(\"${param.name} is required\")" else ""
                     funBuilder.addStatement(
-                        "val ${param.name} = %M.parameters[%S]?.let { %T.%M(it) } $requirer",
+                        "val ${param.name} = %M.${param.paramType.container}[%S]?.let { %T.%M(it) } $requirer",
                         callFunction,
                         param.name,
                         param.converterClass.toTypeName(),
@@ -223,38 +246,41 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                     )
                 } else {
                     val requirer =
-                        if (param.isRequired) "\n?: throw BadRequestException(\"${param.name} should be convertable to ${ksType.declaration.qualifiedName?.asString()}\")" else ""
-                    funBuilder.addStatement("val ${param.name}Converter = converters.get<%T>() ?: throw %M(%S)",
-                        ksType.toTypeName(),
-                        badRequestException,
-                        "No converter found for ${ksType.toTypeName()}, specify it with @Converter annotation or register it in the plugin configuration")
+                        if (isRequired) "\n?: throw BadRequestException(\"${param.name} should be convertable to ${ksType.declaration.qualifiedName?.asString()}\")" else ""
                     funBuilder.addStatement(
-                        "val ${param.name} = %M.parameters[%S]?.let { ${param.name}Converter.fromString(it) }$requirer",
+                        "val ${param.name}Converter = converters.get<%T>() ?: throw %M(%S)",
+                        ksType.toTypeName().copy(nullable = false),
+                        badRequestException,
+                        "No converter found for ${ksType.toTypeName()}, specify it with @Converter annotation or register it in the plugin configuration"
+                    )
+                    funBuilder.addStatement(
+                        "val ${param.name} = %M.${param.paramType.container}[%S]?.let { ${param.name}Converter.fromString(it) }$requirer",
                         callFunction,
                         param.name
                     )
                 }
             }
-            if (routeInfo.body != null) {
-                val type = routeInfo.body.type.resolve()
+            val body = routeInfo.params.firstOrNull { it.paramType === ParamType.BODY }
+            if (body != null) {
+                val type = body.type.resolve()
                 val args =
                     if (type.arguments.isNotEmpty())
                         type.toClassName()
                             .parameterizedBy(type.arguments.mapNotNull { it.type?.resolve()?.toTypeName() })
                     else type.toTypeName()
                 funBuilder.addStatement(
-                    "val ${routeInfo.body.name} = %M.%M<%T>()",
+                    "val ${body.name} = %M.%M<%T>()",
                     callFunction,
                     receiveFunction,
                     args
                 )
             }
 
-            val params = routeInfo.params.asSequence().map { it.position to it.name }.plus(
-                listOfNotNull(routeInfo.body?.let { it.position to it.name })
-            ).plus(
-                routeInfo.provided.map { it.position to it.name }
-            ).sortedBy { it.first }.map { it.second }.joinToString { it }
+            val params = routeInfo.params.asSequence()
+                .map { it.position to it.name }
+                .sortedBy { it.first }
+                .map { it.second }
+                .joinToString { it }
 
             if (routeInfo.returnType.declaration.qualifiedName?.asString() == "kotlin.Unit") {
                 funBuilder.addStatement("${routeInfo.className}.${routeInfo.functionName}($params)")
@@ -274,30 +300,43 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         return fileName.toCamelCase()
     }
 
-    private class PathParam(
+    enum class ParamType(val container: String = "") {
+        PATH("parameters"), BODY, PROVIDED, QUERY("request.queryParameters"), HEADER("request.headers"),
+    }
+
+    private open class Param(
         val name: String,
         val type: KSTypeReference,
         val position: Int,
-        val converterClass: KSType? = null,
-        val isRequired: Boolean = true
+        val paramType: ParamType,
+        val isRequired: Boolean? = null
     )
 
-    private class BodyParam(val name: String, val type: KSTypeReference, val position: Int) // TODO : required
-    private class ProvidedParam(val name: String, val type: KSTypeReference, val position: Int)
+    private class StringParam(
+        name: String,
+        type: KSTypeReference,
+        position: Int,
+        paramType: ParamType,
+        isRequired: Boolean? = null,
+        val converterClass: KSType? = null
+    ) : Param(name, type, position, paramType, isRequired)
+
     private class RouteInfo(
         val httpMethod: HttpMethod,
         val path: String,
         val className: String,
         val functionName: String,
-        val params: List<PathParam>,
-        val body: BodyParam?,
-        val provided: List<ProvidedParam>,
+        val params: List<Param>,
         val returnType: KSType
     )
 
     private class RouterInfo(val className: String, val routes: List<RouteInfo>)
 
     companion object {
+        private val paramAnnotations = listOf(
+            Query::class.simpleName,
+            Header::class.simpleName,
+        )
         private val methodAnnotations = listOf(
             Get::class.simpleName,
             Post::class.simpleName,
