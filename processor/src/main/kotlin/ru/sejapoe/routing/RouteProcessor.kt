@@ -97,9 +97,6 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         val returnType = func.returnType ?: throw IllegalArgumentException("Return type is required")
         val resolvedReturnType = returnType.resolve()
         val returnTypeDeclaration = resolvedReturnType.declaration
-//        if (returnTypeDeclaration !is KSClassDeclaration || returnTypeDeclaration.qualifiedName?.asString() != Response::class.java.name && returnTypeDeclaration.qualifiedName?.asString() != "kotlin.Unit") {
-//            throw IllegalArgumentException("Return type should be MyResponse<*> or Unit")
-//        }
 
 
         return RouteInfo(
@@ -135,7 +132,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         val pathParams = pathParamsDecl.map {
             val parameter = namedParameters[it.removeSuffix("?")]!!
             val converterClass =
-                parameter.annotations.firstOrNull { ann -> ann.shortName.asString() == Converter::class.simpleName }
+                parameter.annotations.firstOrNull { ann -> ann.shortName.asString() == Convert::class.simpleName }
                     ?.arguments?.first()?.value as? KSType
 
             PathParam(
@@ -158,15 +155,13 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             .addSuperinterface(Router::class)
         val funBuilder = FunSpec.builder("registerRoutes")
             .receiver(Application::class)
-            .addParameter(
-                "providers",
-                ProviderRegistry::class
-            )
+            .addParameter("providers", ProviderRegistry::class)
+            .addParameter("converters", ConverterRegistry::class)
             .addModifiers(KModifier.OVERRIDE)
         funBuilder.beginControlFlow("routing")
         objects.forEach { obj ->
             val member = MemberName("", obj)
-            funBuilder.addStatement("%M(providers)", member)
+            funBuilder.addStatement("%M(providers, converters)", member)
         }
         funBuilder.endControlFlow()
         objBuilder.addFunction(funBuilder.build())
@@ -185,10 +180,8 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         val builder = FileSpec.builder("", fileName)
 
         val funBuilder = FunSpec.builder(fileName.toCamelCase())
-            .addParameter(
-                "providers",
-                ProviderRegistry::class
-            )
+            .addParameter("providers", ProviderRegistry::class)
+            .addParameter("converters", ConverterRegistry::class)
             .receiver(Routing::class)
         routes.forEach { routeInfo ->
             funBuilder.beginControlFlow(
@@ -200,8 +193,9 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             routeInfo.provided.forEach {
                 val type = it.type.resolve()
                 funBuilder.addStatement(
-                    "val ${it.name}Provider = providers.get<%T>() ?: throw IllegalArgumentException(%S)",
+                    "val ${it.name}Provider = providers.get<%T>() ?: throw %M(%S)",
                     type.toTypeName(),
+                    badRequestException,
                     "No provider found for ${type.toTypeName()}"
                 )
                 funBuilder.addStatement(
@@ -219,7 +213,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                             .resolve().arguments.first().type?.resolve() != ksType
                     ) throw IllegalArgumentException("Converter and parameter type are mismatched")
                     val requirer =
-                        if (param.isRequired) "?: throw IllegalArgumentException(\"${param.name} is required\")" else ""
+                        if (param.isRequired) "\n?: throw BadRequestException(\"${param.name} is required\")" else ""
                     funBuilder.addStatement(
                         "val ${param.name} = %M.parameters[%S]?.let { %T.%M(it) } $requirer",
                         callFunction,
@@ -229,15 +223,15 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                     )
                 } else {
                     val requirer =
-                        if (param.isRequired) "\n?: throw IllegalArgumentException(\"${param.name} should be convertable to ${ksType.declaration.qualifiedName?.asString()}\")" else ""
+                        if (param.isRequired) "\n?: throw BadRequestException(\"${param.name} should be convertable to ${ksType.declaration.qualifiedName?.asString()}\")" else ""
+                    funBuilder.addStatement("val ${param.name}Converter = converters.get<%T>() ?: throw %M(%S)",
+                        ksType.toTypeName(),
+                        badRequestException,
+                        "No converter found for ${ksType.toTypeName()}, specify it with @Converter annotation or register it in the plugin configuration")
                     funBuilder.addStatement(
-                        "val ${param.name} = %M.parameters[%S]?.%M()$requirer",
+                        "val ${param.name} = %M.parameters[%S]?.let { ${param.name}Converter.fromString(it) }$requirer",
                         callFunction,
-                        param.name,
-                        primitiveConverters[ksType.declaration.qualifiedName?.asString()]
-                            ?: throw IllegalArgumentException(
-                                "Unsupported type"
-                            )
+                        param.name
                     )
                 }
             }
@@ -313,17 +307,6 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             Head::class.simpleName,
             Options::class.simpleName
         )
-        private val primitiveConverters = mapOf(
-            "kotlin.String" to MemberName("kotlin.text", "toString"),
-            "kotlin.Int" to MemberName("kotlin.text", "toIntOrNull"),
-            "kotlin.Long" to MemberName("kotlin.text", "toLongOrNull"),
-            "kotlin.Double" to MemberName("kotlin.text", "toDoubleOrNull"),
-            "kotlin.Float" to MemberName("kotlin.text", "toFloatOrNull"),
-            "kotlin.Boolean" to MemberName("kotlin.text", "toBoolean"),
-            "kotlin.Byte" to MemberName("kotlin.text", "toByteOrNull"),
-            "kotlin.Short" to MemberName("kotlin.text", "toShortOrNull"),
-            "kotlin.Char" to MemberName("kotlin.text", "firstOrNull"),
-        )
         private val methodFunctions = mapOf(
             HttpMethod.Get to MemberName("io.ktor.server.routing", "get"),
             HttpMethod.Post to MemberName("io.ktor.server.routing", "post"),
@@ -337,6 +320,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         private val respondFunction = MemberName("io.ktor.server.response", "respond")
         private val receiveFunction = MemberName("io.ktor.server.request", "receive")
         private val statusObject = MemberName("io.ktor.http", "HttpStatusCode")
+        private val badRequestException = MemberName("io.ktor.server.plugins", "BadRequestException")
     }
 }
 
