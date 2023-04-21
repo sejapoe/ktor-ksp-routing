@@ -97,9 +97,9 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         val returnType = func.returnType ?: throw IllegalArgumentException("Return type is required")
         val resolvedReturnType = returnType.resolve()
         val returnTypeDeclaration = resolvedReturnType.declaration
-        if (returnTypeDeclaration !is KSClassDeclaration || returnTypeDeclaration.qualifiedName?.asString() != Response::class.java.name && returnTypeDeclaration.qualifiedName?.asString() != "kotlin.Unit") {
-            throw IllegalArgumentException("Return type should be MyResponse<*> or Unit")
-        }
+//        if (returnTypeDeclaration !is KSClassDeclaration || returnTypeDeclaration.qualifiedName?.asString() != Response::class.java.name && returnTypeDeclaration.qualifiedName?.asString() != "kotlin.Unit") {
+//            throw IllegalArgumentException("Return type should be MyResponse<*> or Unit")
+//        }
 
 
         return RouteInfo(
@@ -267,12 +267,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                 funBuilder.addStatement("%M.%M(%M.OK)", callFunction, respondFunction, statusObject)
             } else {
                 funBuilder.addStatement("val result = ${routeInfo.className}.${routeInfo.functionName}($params)")
-                funBuilder.beginControlFlow("if (result.isSuccessful)")
-                funBuilder.addStatement("%M.%M(result.status, result.data!!)", callFunction, respondFunction)
-                funBuilder.endControlFlow()
-                    .beginControlFlow("else")
-                funBuilder.addStatement("%M.%M(result.status)", callFunction, respondFunction)
-                funBuilder.endControlFlow()
+                funBuilder.addStatement("%M.%M(result)", callFunction, respondFunction)
             }
             funBuilder.endControlFlow()
         }
