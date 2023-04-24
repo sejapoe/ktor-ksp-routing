@@ -1,11 +1,15 @@
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.server.application.*
 import io.ktor.server.plugins.*
+import io.ktor.server.routing.*
 import io.ktor.server.testing.*
 import io.ktor.util.*
+import io.ktor.util.pipeline.*
 import org.junit.jupiter.api.Test
 import ru.sejapoe.routing.*
+import ru.sejapoe.routing.Pipeline
 import ru.sejapoe.routing.Route
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
@@ -168,6 +172,16 @@ object TestRouting {
         }
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("nice ass", response.bodyAsText())
+    }
+
+    @Get("/getPipelineContext")
+    fun getPipelineContext(@Pipeline pipeline: PipelineContext<Unit, ApplicationCall>) = "nice ${pipeline.call.javaClass.simpleName}"
+
+    @Test
+    fun `get pipeline context`() = testApplication {
+        val response = client.get("/test/getPipelineContext")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice ${RoutingApplicationCall::class.java.simpleName}", response.bodyAsText())
     }
 }
 

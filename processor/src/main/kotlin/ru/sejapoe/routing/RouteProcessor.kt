@@ -11,6 +11,7 @@ import com.squareup.kotlinpoet.ksp.writeTo
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
+import io.ktor.util.pipeline.*
 import java.util.*
 
 class RouteProcessorProvider : SymbolProcessorProvider {
@@ -76,7 +77,25 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             )
         }
 
-        val afterAuthRemained = afterParamsRemained - providedParams.toSet()
+        val pipelineParams =
+            func.parameters.filter { it.annotations.any{ ann -> ann.shortName.asString() == Pipeline::class.simpleName } }
+
+        if (pipelineParams.size > 1) throw IllegalArgumentException("Only one pipeline parameter is allowed")
+
+        params += pipelineParams.map { ksValueParameter ->
+            val ksType = ksValueParameter.type.resolve()
+            if (ksType.toClassName().simpleName != PipelineContext::class.simpleName
+                || ksType.arguments.mapNotNull { it.type?.resolve()?.toClassName()?.simpleName } != listOf(Unit::class.simpleName, ApplicationCall::class.simpleName)
+            ) throw IllegalArgumentException("Pipeline parameter should be PipelineContext<Unit, ApplicationCall> type")
+            Param(
+                ksValueParameter.name!!.asString(),
+                ksValueParameter.type,
+                func.parameters.indexOf(ksValueParameter),
+                ParamType.PIPELINE
+            )
+        }
+
+        val afterAuthRemained = afterParamsRemained - providedParams.toSet() - pipelineParams.toSet()
 
         val bodyParams =
             afterAuthRemained.filter {
@@ -101,7 +120,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
 
 
         return RouteInfo(
-            HttpMethod(httpMethod), // TODO
+            HttpMethod(httpMethod),
             fullPath,
             className,
             func.simpleName.asString(),
@@ -226,6 +245,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                 )
             }
 
+
             routeInfo.params.filterIsInstance<StringParam>().forEach { param ->
                 val ksType = param.type.resolve()
                 val isRequired = param.isRequired ?: !ksType.isMarkedNullable
@@ -260,6 +280,12 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                     )
                 }
             }
+
+            val pipeline = routeInfo.params.firstOrNull { it.paramType === ParamType.PIPELINE }
+            if (pipeline != null) {
+                funBuilder.addStatement("val ${pipeline.name} = this")
+            }
+
             val body = routeInfo.params.firstOrNull { it.paramType === ParamType.BODY }
             if (body != null) {
                 val type = body.type.resolve()
@@ -301,7 +327,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
     }
 
     enum class ParamType(val container: String = "") {
-        PATH("parameters"), BODY, PROVIDED, QUERY("request.queryParameters"), HEADER("request.headers"),
+        PATH("parameters"), BODY, PROVIDED, QUERY("request.queryParameters"), HEADER("request.headers"), PIPELINE
     }
 
     private open class Param(
