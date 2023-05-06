@@ -1,4 +1,3 @@
 - add tests for all
-- fix "gradle clean build" needment after each change in plugin
 - fix auto-reload broke providers
 - fix all Exception messages

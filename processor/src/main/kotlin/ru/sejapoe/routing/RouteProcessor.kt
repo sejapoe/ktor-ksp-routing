@@ -4,10 +4,7 @@ import com.google.devtools.ksp.processing.*
 import com.google.devtools.ksp.symbol.*
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import com.squareup.kotlinpoet.ksp.kspDependencies
-import com.squareup.kotlinpoet.ksp.toClassName
-import com.squareup.kotlinpoet.ksp.toTypeName
-import com.squareup.kotlinpoet.ksp.writeTo
+import com.squareup.kotlinpoet.ksp.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.routing.*
@@ -29,7 +26,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             annotatedClasses.filterIsInstance<KSClassDeclaration>()
                 .filter { it.parentDeclaration == null }
                 .associateWith(::processClass)
-                .map { RouterInfo(it.key.simpleName.asString(), it.value) })
+                .map { RouterInfo(it.key.simpleName.asString(), it.value, it.key.containingFile!!) })
         return emptyList()
     }
 
@@ -210,7 +207,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
 
         val fileSpec = builder.build()
 
-        val dependencies = fileSpec.kspDependencies(aggregating = false)
+        val dependencies = fileSpec.kspDependencies(aggregating = true, )
 
         fileSpec.writeTo(codeGenerator, dependencies)
     }
@@ -321,7 +318,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
 
         val fileSpec = builder.build()
 
-        val dependencies = fileSpec.kspDependencies(aggregating = false)
+        val dependencies = fileSpec.kspDependencies(aggregating = true, listOf(routerInfo.originalFile))
         fileSpec.writeTo(codeGenerator, dependencies)
         return fileName.toCamelCase()
     }
@@ -356,7 +353,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
         val returnType: KSType
     )
 
-    private class RouterInfo(val className: String, val routes: List<RouteInfo>)
+    private class RouterInfo(val className: String, val routes: List<RouteInfo>, val originalFile: KSFile)
 
     companion object {
         private val paramAnnotations = listOf(
