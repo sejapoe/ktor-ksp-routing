@@ -157,7 +157,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
             StringParam(
                 it.removeSuffix("?"),
                 parameter.type,
-                parameters.indexOf(parameter),
+                parameterList.indexOf(parameter),
                 ParamType.PATH,
                 !it.endsWith("?"),
                 converterClass
@@ -182,7 +182,7 @@ class RouteProcessor(val codeGenerator: CodeGenerator, val options: Map<String, 
                 Header::class.simpleName -> ParamType.HEADER
                 else -> throw IllegalArgumentException("Unknown annotation")
             }
-            StringParam(name, it.type, parameters.indexOf(it), paramType, null, converterClass)
+            StringParam(name, it.type, parameterList.indexOf(it), paramType, null, converterClass)
         }
 
         return parsedParams to parameters.toMutableList()

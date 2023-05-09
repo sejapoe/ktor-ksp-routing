@@ -175,7 +175,8 @@ object TestRouting {
     }
 
     @Get("/getPipelineContext")
-    fun getPipelineContext(@Pipeline pipeline: PipelineContext<Unit, ApplicationCall>) = "nice ${pipeline.call.javaClass.simpleName}"
+    fun getPipelineContext(@Pipeline pipeline: PipelineContext<Unit, ApplicationCall>) =
+        "nice ${pipeline.call.javaClass.simpleName}"
 
     @Test
     fun `get pipeline context`() = testApplication {
@@ -183,12 +184,31 @@ object TestRouting {
         assertEquals(HttpStatusCode.OK, response.status)
         assertEquals("nice ${RoutingApplicationCall::class.java.simpleName}", response.bodyAsText())
     }
+
+    @Get("/getProviderFirstArg/{inc}")
+    fun getProviderFirstArg(@Provided provided: TestProvided, inc: Int) = "nice ${provided.value + inc}"
+
+    @Test
+    fun `get provider first argument`() = testApplication {
+        val inc = 6
+        val response = client.get("/test/getProviderFirstArg/$inc")
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals("nice ${42 + inc}", response.bodyAsText())
+    }
+}
+
+data class TestProvided(val value: Int)
+
+class TestProvider : Provider<TestProvided> {
+    override suspend fun provide(call: ApplicationCall) =
+        TestProvided(42)
 }
 
 @KtorDsl
 fun testApplication(foo: @KtorDsl suspend ApplicationTestBuilder.() -> Unit) {
     io.ktor.server.testing.testApplication {
         install(KspRouting) {
+            registerProvider(TestProvider())
             registerConverter {
                 try {
                     LocalDate.parse(it)
